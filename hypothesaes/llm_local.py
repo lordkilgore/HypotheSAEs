@@ -14,10 +14,10 @@ from huggingface_hub import HfApi
 from huggingface_hub.utils import RepositoryNotFoundError
 from requests.exceptions import HTTPError
 
-from vllm import LLM, SamplingParams
+# from vllm import LLM, SamplingParams
 import time
 
-_LOCAL_ENGINES: dict[str, LLM] = {}
+_LOCAL_ENGINES: dict[str] = {}
 
 @lru_cache(maxsize=256) # Cache models that we've already checked
 def hf_model_exists(repo_id: str) -> bool:
@@ -43,7 +43,7 @@ def _sleep_all_except(active_model: Optional[str] = None) -> None:
         engine.llm_engine.reset_prefix_cache()
         engine.sleep(level=2) # Level 1 clears KV cache and moves weights to CPU; Level 2 clears cache + clears weights entirely
 
-def get_vllm_engine(model: str, **kwargs) -> LLM:
+def get_vllm_engine(model: str, **kwargs):
     """
     Return a vLLM engine for `model`.
 
