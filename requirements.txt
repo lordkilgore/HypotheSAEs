@@ -13,5 +13,5 @@ tiktoken
 torch
 tqdm
 transformers
-# vllm
+vllm
 jmespath
