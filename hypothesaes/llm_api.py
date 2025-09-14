@@ -2,64 +2,47 @@
 
 import os
 import time
-import openai
+from google import genai
 
-_CLIENT_OPENAI = None  # Module-level cache for the OpenAI client
+_CLIENT_GEMINI = None  # Module-level cache for the Google client
 
-"""
-These model IDs point to the latest versions of the models as of 2025-05-04.
-We point to a specific version for reproducibility, but feel free to update them as necessary.
-Note that o-series models (o1, o1-mini, o3-mini) are also supported by get_completion().
-We don't point these models to a specific version, so passing in these model names will use the latest version.
-
-2025-05-04:
-- Removed gpt-4 (deprecated by gpt-4o, will be removed from API soon)
-- Added gpt-4.1 models (not used by HypotheSAEs paper, but potentially of interest)
-
-2025-03-12:
-- First version of this file: supports gpt-4o, gpt-4o-mini, gpt-4
-"""
+# GPT-Generated!
 model_abbrev_to_id = {
-    'gpt4o': 'gpt-4o-2024-11-20',
-    'gpt-4o': 'gpt-4o-2024-11-20',
-    'gpt4o-mini': 'gpt-4o-mini-2024-07-18',
-    'gpt-4o-mini': 'gpt-4o-mini-2024-07-18',
+    # Flash family (fast, cheaper, shorter context)
+    "flash-2.5": "gemini-2.5-flash",
 
-    "gpt4.1": "gpt-4.1-2025-04-14",
-    "gpt-4.1": "gpt-4.1-2025-04-14",
-    "gpt4.1-mini": "gpt-4.1-mini-2025-04-14",
-    "gpt-4.1-mini": "gpt-4.1-mini-2025-04-14",
-    "gpt4.1-nano": "gpt-4.1-nano-2025-04-14",
-    "gpt-4.1-nano": "gpt-4.1-nano-2025-04-14",
-    "gpt5": "gpt-5",
-    "gpt-5": "gpt-5",
+    # Pro family (more capable, longer context)
+    "pro-2.5": "gemini-1.5-pro",
+
+    # Experimental / other available variants
+    "flash-1.5": "gemini-1.5-flash",
 }
 
-DEFAULT_MODEL = "gpt-4.1-mini"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 def get_client():
-    """Get the OpenAI client, initializing it if necessary and caching it."""
-    global _CLIENT_OPENAI
-    if _CLIENT_OPENAI is not None:
-        return _CLIENT_OPENAI
+    """Get the Gemini client, initializing it if necessary and caching it."""
+    global _CLIENT_GEMINI
+    if _CLIENT_GEMINI is not None:
+        return _CLIENT_GEMINI
 
-    api_key = os.environ.get('OPENAI_KEY_SAE')
+    api_key = os.environ.get('GEMINI_API_KEY')
     if api_key is None or '...' in api_key:
-        raise ValueError("Please set the OPENAI_KEY_SAE environment variable before using functions which require the OpenAI API.")
+        raise ValueError("Please set the GEMINI_API_KEY environment variable before using functions which require the Gemini API.")
 
-    _CLIENT_OPENAI = openai.OpenAI(api_key=api_key)
-    return _CLIENT_OPENAI
+    _CLIENT_GEMINI = genai.Client(api_key=api_key)
+    return _CLIENT_GEMINI
 
 def get_completion(
     prompt: str,
     model: str = DEFAULT_MODEL,
-    timeout: float = 15.0,
+    timeout: float = 18.0,
     max_retries: int = 3,
     backoff_factor: float = 2.0,
     **kwargs
 ) -> str:
     """
-    Get completion from OpenAI API with retry logic and timeout.
+    Get completion from Gemini API with retry logic and timeout.
     
     Args:
         prompt: The prompt to send
@@ -79,18 +62,27 @@ def get_completion(
     
     for attempt in range(max_retries):
         try:
-            response = client.chat.completions.create(
+            response = client.models.generate_content(
                 model=model_id,
-                messages=[{"role": "user", "content": prompt}],
-                timeout=timeout,
-                **kwargs
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
+                    **kwargs
+                )
             )
-            return response.choices[0].message.content
+             
+            text = response.text
+            # Workaround for partial responses due to output token limit
+            if text is None:
+                text = "".join(c.text for c in response.candidates[0].content.parts if c.text)
+                return text
             
-        except (openai.RateLimitError, openai.APITimeoutError) as e:
-            if attempt == max_retries - 1:  # Last attempt
+            return text
+            
+        except Exception as e:
+            if attempt == max_retries - 1:
                 raise e
-            
+
+            # pretty neat
             wait_time = timeout * (backoff_factor ** attempt)
             if attempt > 0:
                 print(f"API error: {e}; retrying in {wait_time:.1f}s... ({attempt + 1}/{max_retries})")

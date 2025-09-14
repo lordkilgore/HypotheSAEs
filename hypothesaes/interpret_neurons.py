@@ -248,35 +248,20 @@ class NeuronInterpreter:
         
         return response.strip('"').strip()
  
-    def _get_interpretation_openai(
+    def _get_interpretation_gemini(
         self,
         prompt: str,
         config: InterpretConfig,
     ) -> Optional[str]:
         """Send a single prompt to the interpreter model and return the parsed interpretation."""
         try:
-            if "gpt-5" in self.interpreter_model:
-                response = get_completion(
-                    prompt=prompt,
-                    model=self.interpreter_model,
-                    max_completion_tokens=config.llm.max_interpretation_tokens,
-                    reasoning_effort="minimal",
-                )
-            elif self.interpreter_model.startswith("o"):
-                response = get_completion(
-                    prompt=prompt,
-                    model=self.interpreter_model,
-                    max_completion_tokens=config.llm.max_interpretation_tokens,
-                    reasoning_effort="low",
-                )
-            else:
-                response = get_completion(
-                    prompt=prompt,
-                    model=self.interpreter_model,
-                    temperature=config.llm.temperature,
-                    max_tokens=config.llm.max_interpretation_tokens,
-                    timeout=config.llm.timeout,
-                )
+            response = get_completion(
+                prompt=prompt,
+                model=self.interpreter_model,
+                timeout=config.llm.timeout,
+                temperature=config.llm.temperature,
+                max_output_tokens=config.llm.max_interpretation_tokens,
+            )
             return self._parse_interpretation(response)
         except Exception as e:
             print(f"Failed to get interpretation: {e}")
@@ -314,7 +299,7 @@ class NeuronInterpreter:
         # Use parallel threads to generate interpretations for API models
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_workers_interpretation) as executor:
             future_to_idx = {
-                executor.submit(self._get_interpretation_openai, p, config): i
+                executor.submit(self._get_interpretation_gemini, p, config): i
                 for i, p in enumerate(valid_prompts)
             }
 
